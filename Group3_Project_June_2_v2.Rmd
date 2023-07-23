@@ -1,0 +1,523 @@
+---
+title: "NYC Motor Vehicle Collisions"
+author: 'Group3: Aidan Olander, Joy Milan, Kruthiga Kolatthupalayam Mohanasundaram, Lavi Paoletti, Que Pham'
+date: "`r format(Sys.Date(), '%b %d, %Y')`"
+output: html_document
+fontsize: 12pt
+margin: 1in
+---
+
+```{r setup, echo=FALSE, message=F, warning=F, include=FALSE}
+
+# Clear the working space
+rm(list = ls())
+
+### Load the packages (all must have been installed)
+library(tidyverse)
+library(stargazer)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(GGally)
+library(corrplot)
+library(scales)
+library(ggrepel)
+library(reshape2)
+
+```
+  
+  We are interested in analyzing the NYC Motor Vehicle Collisions dataset to gain insights into the patterns and trends of motor vehicle collisions in New York City. Our goal is to understand the frequency and severity of these collisions, identify high-risk areas or factors contributing to crashes, and explore potential correlations between different variables such as time of day, contributing factor, vehicle types involved, etc. By examining the dataset, which includes information from police-reported collisions, we aim to provide visualizations that effectively communicate the patterns and trends of motor vehicle collisions in NYC, enabling stakeholders to make informed decisions regarding traffic safety measures and accident prevention strategies.
+
+
+## Dataset
+Dataset Link: https://www.kaggle.com/datasets/utkarshx27/motor-vehicle-collisions
+
+Based on (Utkarsh Singh, 2023), The Motor Vehicle Collisions crash table contains details on the crash event. Each row represents a crash event. The Motor Vehicle Collisions data tables contain information from all police reported motor vehicle collisions in NYC. The police report (MV104-AN) is required to be filled out for collisions where someone is injured or killed, or where there is at least $1000 worth of damage.
+
+There are 1,987,321 observations and 29 variables in the dataset.
+
+
+```{r data, echo=FALSE, warning=FALSE, include=FALSE}
+
+# Load data
+mydata <- read.csv("Motor_Vehicle_Collisions_-_Crashes.csv", header = TRUE)
+
+```
+
+
+```{r clean, echo=FALSE, warning=FALSE, include=FALSE}
+
+df<-mydata
+dim(df)
+str(df)
+df$CRASH.DATE <- as.POSIXct(df$CRASH.DATE, format = "%m/%d/%Y")
+df$CRASH.TIME <- as.POSIXct(df$CRASH.TIME, format = "%H:%M")
+
+# Add new columns for year, month, day, day of month, day of week, Weekday or Weekend, hour
+df<-df %>%
+  mutate(Year=year(CRASH.DATE),
+         Month=month(CRASH.DATE),
+         DayOfMonth=day(CRASH.DATE),
+         DayOfWeek=wday(CRASH.DATE, label = TRUE),
+         Day=match(DayOfWeek, c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")),
+         IsWeekday=ifelse(wday(CRASH.DATE) %in% c(2:6), "Weekday", "Weekend"),
+         Hour=hour(CRASH.TIME))
+
+df[,c(3:4,7:10,19:23,25:29,35)]<-lapply(df[,c(3:4,7:10,19:23,25:29,35)],factor)
+
+# Checking for NAs
+sum(is.na(df))
+colSums(is.na(df))
+dim(df)
+str(df)
+# Drop NAs in Latitude (Optional)
+#df<-df[!is.na(df$LATITUDE), ]
+#colSums(is.na(df))
+#dim(df)
+#there are still NAs in ZipCode, NUMBER.OF.PERSONS.INJURED, Number of Persons Killed, CONTRIBUTING.FACTOR.VEHICLE.1, 
+#VEHICLE.TYPE.CODE.1 , VEHICLE.TYPE.CODE.2, VEHICLE.TYPE.CODE.3 
+#We will not remove these because these are not missing data but it means , it doesn't exist
+
+```
+## Summary Statistics
+### Descriptive Statistics of Numerical Variables
+```{r descriptive_num, echo=FALSE}
+
+stargazer(df, 
+          type = 'text', min.max=TRUE, mean.sd = TRUE, 
+          nobs = TRUE, median = TRUE, iqr = TRUE,
+          digits=1, align=T,
+          title = "Descriptive Statistics of Numerical Variables")
+
+```
+
+### Descriptive Statistics of Categorical Variables
+```{r descriptive_cat, echo = FALSE, message=F, warning=F}
+
+summary(df[, sapply(df, is.factor) | sapply(df, is.POSIXct)], na.rm = FALSE)
+
+```
+## Exploratory Data Analysis
+```{r eda, echo=FALSE, message=F, warning=F}
+
+# Split df to df_num and df_cat
+#str(df)
+#df_num - exclude date, time, and collision id
+df_num<-df[,c(5:6,11:18,30:32,34,36)]
+#str(df_num)
+
+#df_cat - exclude location, this is duplicate of lat/long
+df_cat<-df[,c(3:4,8:10,19:23,25:29,33,35)]
+#str(df_cat)
+
+# correlogram with ggplot aesthetics
+#ggcorr(df_num_drop, method = c("everything","pearson"),
+#       geom = "blank", label = TRUE) + 
+#  geom_point(size = 10, aes(color = coefficient > 0, 
+#                            alpha = abs(coefficient) > 0.5)) +
+#  scale_alpha_manual(values = c("TRUE" = 0.25, "FALSE" = 0)) +
+#  guides(color = FALSE, alpha = FALSE)
+
+
+# Create correlation matrix
+
+#drop NAs
+#colSums(is.na(df_num))
+df_num_drop<-df_num
+df_num_drop<-na.omit(df_num_drop)
+#colSums(is.na(df_num_drop))
+
+#create correlation matrix
+cor_matrix<-cor(df_num_drop)
+corrplot(cor_matrix, type = 'upper', method = 'color', 
+         addCoef.col = "black", tl.col = "black", tl.srt = 45,
+         tl.cex = 0.6, number.cex = 0.5)
+
+
+```
+
+
+Top correlations include:<br>
+ - Latitude and Longitude (-0.96)<br>
+ - Number of persons injured and number of motorists injured (0.9)<br>
+ - Number of persons killed and number of pedestrians killed (0.71)<br>
+ - Number of persons killed and number of motorists killed (0.65)
+
+The observed correlations suggest some strong relationships within the dataset. The correlation of 0.9 between the number of persons injured and the number of motorists injured suggests that the majority of injuries involve motorists. Also, the correlations between the number of persons killed and the number of pedestrians killed (0.71) and the number of motorists killed (0.65) highlight the potential dangers faced by both pedestrians and motorists in fatal collisions. 
+
+## Number of Collisions by Borough
+```{r analysis_byBorough_month, echo=FALSE, message=F, warning=F}
+
+# Line chart: Average number of collisions by month by Borough
+end_date <- as.POSIXct("2023-03-31")
+
+df %>%
+  filter(BOROUGH != "",CRASH.DATE <= end_date) %>%
+  group_by(Month, BOROUGH) %>%
+  summarise(n = mean(n())) %>%
+  ggplot(aes(x = Month, y = n,group = BOROUGH,colour = BOROUGH)) +
+  geom_point(size = 0) +
+  geom_line(size = 1, show.legend = TRUE) +
+  ggtitle("Average Accidents in Boroughs by Month") +
+  labs(subtitle ="For All Years",
+       caption = paste("Data from", format(min(df$CRASH.DATE), "%B %e, %Y"), 
+                       "to",format(end_date, "%B %e, %Y")))+
+  theme_minimal()+
+  theme(panel.grid = element_blank(),
+        axis.line = element_line(color = "grey", size = 0.5),
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_x_continuous(breaks = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+                     labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
+  scale_y_continuous(labels = scales::label_number_si(unit = "K", scale = 1e-3)) +
+  ylab("Average Collisions")
+
+```
+
+
+From July 1, 2012, to April 25, 2023, the average number of collisions by borough in NYC varies throughout the year. Brooklyn, Queens, and Manhattan consistently experience the highest number of collisions. The data shows a general trend of higher collision rates in the second half of the year compared to the first half. Interestingly, the month of July stands out with the highest number of collisions, possibly due to increased activity and travel during the summer season.
+
+
+```{r analysis_byBorough_monthyear, echo=FALSE, message=F, warning=F, fig.width=12, fig.height=6}
+
+# Line chart: Average number of collisions by month and year
+# Define the desired calendar order of the MonthYear variable
+df$MonthYear <- floor_date(df$CRASH.DATE, "month")
+df$MonthYear <- as.POSIXct(format(df$MonthYear, "%Y-%m-01"))
+start_date <- as.POSIXct("2018-01-01")
+end_date <- as.POSIXct("2023-03-31")
+
+df %>%
+  filter(BOROUGH != "",CRASH.DATE >= start_date & CRASH.DATE <= end_date) %>%
+  group_by(MonthYear, BOROUGH) %>%
+  summarise(n = mean(n())) %>%
+  ggplot(aes(x = MonthYear, y = n, group = BOROUGH, colour = BOROUGH)) +
+  geom_point(size = 0) +
+  geom_line(size = 1, show.legend = TRUE) +
+  ggtitle("Average Accidents in Boroughs by Month") +
+  labs(subtitle ="Time Series",
+       caption = paste("Data from", format(start_date, "%B %e, %Y"), 
+                       "to",format(end_date, "%B %e, %Y")))+
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.line = element_line(color = "grey", size = 0.5),
+    plot.title = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_x_datetime(date_labels = "%b %Y", date_breaks = "1 month")+
+  scale_y_continuous(labels = scales::label_number_si(unit = "K", scale = 1e-3)) +
+  ylab("Average Collisions")
+
+```
+
+
+
+```{r analysis_byBorough_dayofweek, echo=FALSE, message=F, warning=F}
+# by Day of Week
+end_date <- as.POSIXct("2023-03-31")
+
+df %>%
+  filter(BOROUGH != "",CRASH.DATE <= end_date) %>%
+  group_by(DayOfWeek, BOROUGH) %>%
+  summarise(n = mean(n())) %>%
+  ggplot(aes(x = DayOfWeek, y = n,group = BOROUGH,colour = BOROUGH)) +
+  geom_point(size = 0) +
+  geom_line(size = 1, show.legend = TRUE) +
+  ggtitle("Average Accidents in Boroughs by Day of Week") +
+  labs(subtitle ="For All Years",
+       caption = paste("Data from", format(min(df$CRASH.DATE), "%B %e, %Y"), 
+                       "to",format(end_date, "%B %e, %Y")))+
+  theme_minimal()+
+  theme(panel.grid = element_blank(),
+        axis.line = element_line(color = "grey", size = 0.5),
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_x_discrete(labels = c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")) +
+  scale_y_continuous(labels = scales::label_number_si(unit = "K", scale = 1e-3)) +
+  ylab("Average Collisions") +
+  guides(fill = guide_legend(override.aes = list(colour = NA)))  
+
+
+```
+
+Based on the average collisions by day of the week in NYC, it can be observed that Brooklyn, Queens, and Manhattan continue to have the highest number of accidents. This can be attributed to the high population and traffic density in these boroughs. Interestingly, there is a noticeable peak in accidents on Fridays across all boroughs. This may be attributed to increased traffic volume and rush hour conditions as people commute and travel more frequently on Fridays. Contrary to expectations, the number of accidents appears to be lower on Saturdays and Sundays. This could be attributed to reduced weekday traffic, as well as a lower number of commuting vehicles during the weekends. However, the number of accidents tends to increase again on Mondays, potentially indicating a higher level of activity as people resume their work and commute after the weekend. These observations suggest that factors such as population density, commuting patterns, and traffic conditions contribute to the variation in the number of collisions across different days of the week and boroughs in NYC.
+
+```{r analysis_byBorough_hour, echo=FALSE, message=F, warning=F}
+
+# by Hour
+end_date <- as.POSIXct("2023-03-31")
+
+df %>%
+  filter(BOROUGH != "",CRASH.DATE <= end_date) %>%
+  group_by(Hour, BOROUGH) %>%
+  summarise(n = mean(n())) %>%
+  ggplot(aes(x = Hour, y = n, group = BOROUGH, colour = BOROUGH)) +
+  geom_point(size = 0) +
+  geom_line(size = 1, show.legend = TRUE) +
+  ggtitle("Average Accidents in Boroughs by Hour") +
+  labs(subtitle ="For All Years",
+       caption = paste("Data from", format(min(df$CRASH.DATE), "%B %e, %Y"), 
+                       "to",format(end_date, "%B %e, %Y")))+
+  theme_minimal() +
+  theme(panel.grid = element_blank(),
+        axis.line = element_line(color = "grey", size = 0.5),
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_x_continuous(breaks = c(0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24),
+                     labels = c("12AM","2AM","4AM","6AM","8AM","10AM","12PM","2PM","4PM","6PM","8PM","10PM","12AM")) +
+  scale_y_continuous(labels = scales::label_number_si(unit = "K", scale = 1e-3)) +
+  ylab("Average Collisions") +
+  guides(fill = guide_legend(override.aes = list(colour = NA))) 
+
+```
+
+Based on the analysis of average collisions by hour in NYC, it is evident that the highest peak occurs between 4 PM and 6 PM across all boroughs. This time period corresponds to the evening rush hour, when many individuals are commuting from work or school, resulting in increased traffic volume and a higher likelihood of collisions. The second peak in average collisions is observed around 2 PM, which could be attributed to various factors such as lunchtime traffic, school dismissal, or other midday activities that contribute to increased congestion on the roads. Additionally, there is a notable peak at 8 AM, which aligns with the morning rush hour as people commute to work or drop off children at school. These patterns suggest that the timing of daily activities, such as commuting and school schedules, significantly impacts the frequency of collisions in NYC. 
+
+
+```{r contributingfactor_bar, echo=FALSE, message=F, warning=F}
+
+#Stacking 5 contributing factor columns into 1 to count the frequency of reasons.
+reason <- df %>% select(c('CRASH.DATE', 'CRASH.TIME', 'CONTRIBUTING.FACTOR.VEHICLE.1':'CONTRIBUTING.FACTOR.VEHICLE.5'))
+
+reason <- melt(reason, value.name ='reasons', id.vars=1:2)
+
+#get the top 10 reasons with highest frequency, filtered out blank, unspecified and improper reasons.
+reason1 <- data.frame(table(reason$reasons))
+reason1<-reason1[-which(reason1$Var1 == c("","1","80")), ] %>%
+ filter(Var1 != "Unspecified")%>%
+ arrange(Freq) %>%
+ tail(10)
+
+#plot
+reason_plot <- ggplot(reason1,aes(x=reorder(Var1, -Freq),y=Freq))+ 
+  geom_col(fill = "steelblue", show.legend = FALSE) +
+  scale_y_continuous(name ='Number of Cases', breaks= c(0,10000,50000,100000,300000,500000), labels = c("0","10K","50K", "100K","300K", "500K")) +
+  labs(x = "Reasons of Collisions",
+       title = "Most Common Reasons for NYC Motor Vehicle Collisions",
+       subtitle ="For All Vehicle Involved, For All Years",
+       caption = paste("Data from", format(min(df$CRASH.DATE), "%B %e, %Y"), 
+                       "to",format(max(df$CRASH.DATE), "%B %e, %Y")))+
+  theme_minimal()+
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size =9),
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(color = "Black", size = 15, face ="bold", hjust=0.5),
+    plot.subtitle = element_text(color = "grey28", size = 12, hjust = 0.5))
+reason_plot
+
+#ggsave(reason_plot, filename = "rsplot.pdf", width = 8, height =9, dpi =300)
+
+```
+```{r deadly_crashes, echo=FALSE, message=F, warning=F}
+
+## Create a new new variable for collisions with high level of injury/death and subset data frame to only keep deadly crashes
+
+df$COLLISION.COST = (df$NUMBER.OF.PERSONS.INJURED * 0.5) + df$NUMBER.OF.PERSONS.KILLED
+
+df$HIGH.COST.COLLISION <- ifelse(df$COLLISION.COST > 2, 1, 0)
+
+deadly_collisions <- df[df$HIGH.COST.COLLISION == 1, ]
+
+minor_collisions <- df[df$HIGH.COST.COLLISION == 0, ]
+
+sum(df$HIGH.COST.COLLISION, na.rm = TRUE)
+
+```
+
+There are a total of 5527 crashes that are deemed to be "high cost crashes" - meaning there are multiple fatalities, numerous injuries, or a combination of the two. 
+
+```{r deadly_crashe_reasons , echo=FALSE, message=F, warning=F}
+
+reason_deadly <- deadly_collisions %>% select(c('CRASH.DATE', 'CRASH.TIME', 'CONTRIBUTING.FACTOR.VEHICLE.1':'CONTRIBUTING.FACTOR.VEHICLE.5'))
+
+reason_deadly <- melt(reason_deadly, value.name ='reasons', id.vars=1:2)
+
+reason2 <- data.frame(table(reason_deadly$reasons))
+reason2<-reason2[-which(reason2$Var1 == c("","1","80")), ] %>%
+ filter(Var1 != "Unspecified")%>%
+ arrange(Freq) %>%
+ tail(10)
+
+reason_plot2 <- ggplot(reason2,aes(x=reorder(Var1, -Freq),y=Freq))+ 
+  geom_col(fill = "steelblue", show.legend = FALSE) +
+  scale_y_continuous(name ='Number of Cases') +
+  labs(x = "Reasons of Collisions",
+       title = "Most Common Reasons for Deadly NYC Motor Vehicle Collisions",
+       subtitle ="For All Vehicle Involved, For All Years",
+       caption = paste("Data from", format(min(df$CRASH.DATE), "%B %e, %Y"), 
+                       "to",format(max(df$CRASH.DATE), "%B %e, %Y")))+
+  theme_minimal()+
+  theme(
+    axis.text.x = element_text(angle = 50, vjust = 1, hjust=1,size = 7),
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(color = "Black", size = 15, face ="bold", hjust=0.5),
+    plot.subtitle = element_text(color = "grey28", size = 12, hjust = 0.5))
+reason_plot2
+
+## Comparing deadly crash reasons to non deadly crash reasons
+
+reason_minor <- minor_collisions %>% select(c('CRASH.DATE', 'CRASH.TIME', 'CONTRIBUTING.FACTOR.VEHICLE.1':'CONTRIBUTING.FACTOR.VEHICLE.5'))
+
+reason_minor <- melt(reason_minor, value.name ='reasons', id.vars=1:2)
+
+reason3 <- data.frame(table(reason_minor$reasons))
+reason3<-reason3[-which(reason3$Var1 == c("","1","80")), ] %>%
+ filter(Var1 != "Unspecified")%>%
+ arrange(Freq) %>%
+ tail(10)
+
+reason_plot3 <- ggplot(reason3,aes(x=reorder(Var1, -Freq),y=Freq))+ 
+  geom_col(fill = "steelblue", show.legend = FALSE) +
+  scale_y_continuous(name ='Number of Cases') +
+  labs(x = "Reasons of Collisions",
+       title = "Most Common Reasons for Minor NYC Motor Vehicle Collisions",
+       subtitle ="For All Vehicle Involved, For All Years",
+       caption = paste("Data from", format(min(df$CRASH.DATE), "%B %e, %Y"), 
+                       "to",format(max(df$CRASH.DATE), "%B %e, %Y")))+
+  theme_minimal()+
+  theme(
+    axis.text.x = element_text(angle = 50, vjust = 1, hjust=1,size = 7),
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(color = "Black", size = 15, face ="bold", hjust=0.5),
+    plot.subtitle = element_text(color = "grey28", size = 12, hjust = 0.5))
+reason_plot3
+
+```
+
+While the most common reasons for minor and major accidents are both similar, when comparing the two one can see a few important distinctions. Disregarding Traffic Control, Unsafe Speeds, and Alcohol Impairment are all common reasons for deadly crashes, while they are not in the top 10 most common reasons for minor accidents. 
+
+```{r deadly_crashes_chart, echo=FALSE, message=FALSE, warning=FALSE}
+
+library(forcats)
+
+## Most common areas for deadly collisions
+
+borough_deadly <- deadly_collisions %>% 
+  select(c('CRASH.DATE', 'BOROUGH')) %>%
+  filter(BOROUGH != "") %>%
+  group_by(BOROUGH) %>%
+    summarise(total_count=n(),
+            .groups = 'drop') %>%
+    arrange(desc(total_count))
+
+
+bourough_plot_1 <- ggplot(borough_deadly, aes(x = reorder(BOROUGH, -total_count), y = total_count))+
+  geom_col(stat="identity") +
+  labs(x = "Borough",
+   title = "Location of Deadly NYC Motor Vehicle Collisions",
+   subtitle ="For All Vehicle Involved, For All Years")
+
+bourough_plot_1
+
+
+## Most common area for minor collisions
+
+borough_minor <- minor_collisions %>% 
+  select(c('CRASH.DATE', 'BOROUGH')) %>%
+  filter(BOROUGH != "") %>%
+  group_by(BOROUGH) %>%
+    summarise(total_count=n(),
+            .groups = 'drop') %>%
+    arrange(desc(total_count))
+
+
+bourough_plot_2 <- ggplot(borough_minor, aes(x = reorder(BOROUGH, -total_count), y = total_count))+
+  geom_col(stat="identity") +
+  labs(x = "Borough",
+     title = "Location of Minor NYC Motor Vehicle Collisions",
+     subtitle ="For All Vehicle Involved, For All Years")
+
+bourough_plot_2
+
+
+
+
+
+```
+
+
+``` {r most common types of vehicles in collisions, echo=FALSE, message=FALSE, warning=FALSE}
+#create DF with just main vehicle types
+df_cars <- as.data.frame(df[, c("VEHICLE.TYPE.CODE.1")])
+
+#rename column
+colnames(df_cars)[1] <- 'vehicle_type'
+
+#low function will be used to make all vehicle types lowercase to help with
+#consolidation further on
+low <- function(x) tolower(x)
+df_cars['vehicle_type'] <- lapply(df_cars['vehicle_type'], low)
+
+#consolidation_terms function is used to reduce number of unique vehicle types
+#many were input just slightly differently, such as Sedan and 4 dr sedan
+#it is however a very very inefficient function
+consolidate_terms <- function(term) {
+        if (is.na(term)){
+                return('NA')
+        }else if (str_detect(term, 'sedan')){
+                return('sedan')
+        } else if (str_detect(term, 'taxi')){
+                return('livery vehicle')
+        } else if (str_detect(term, 'station wagon')){
+                return('station wagon')
+        } else if (str_detect(term, 'ambu')){
+                return('ambulance')
+        } else if (str_detect(term, 'truck')){
+                return('truck')
+        } else if (str_detect(term, 'motor')){
+                return('motorcycle')
+        } else if (str_detect(term, 'bik')){
+                return('bicycle')
+        } else{
+                return(term)
+        }
+}
+
+#new DF for posterity 
+df_cons_cars <- df_cars
+
+#this takes a long time to run (inefficient function) so be aware
+#uses consolidating function above
+df_cons_cars$vehicle_type <- sapply(X = df_cons_cars$vehicle_typ, FUN = consolidate_terms)
+
+#group by vehicle type and get count, then turn it into a dataframe
+agg_tbl <- df_cons_cars %>% group_by(vehicle_type) %>% 
+  summarise(total_count=n(),
+            .groups = 'drop')
+df_car_count <- agg_tbl %>% as.data.frame()
+
+#order the DF by count descending
+df_car_ordered <- df_car_count[order(df_car_count$total_count, decreasing = TRUE),]
+
+#remove unknown, other, and blank vehicle types
+df_clean <- subset(df_car_ordered, vehicle_type!="")
+df_clean <- subset(df_clean, vehicle_type!="other")
+df_clean <- subset(df_clean, vehicle_type!="unknown")
+
+#take top 20 types
+df_top20 <- head(df_clean, 20)
+
+#plot the top 20 in a bar chart
+common_types_plot <- ggplot(df_top20, aes(reorder(vehicle_type, -total_count), total_count)) +
+  geom_col() + 
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+        geom_text(aes(label = total_count), vjust = 0, size = 2.1) + 
+        scale_y_continuous(labels = label_comma()) + 
+        labs(x = "Vehicle Type",
+         y = "Count of Collisions",
+         title = "Most Common Types of Vehicles in NYC Collisions",
+         caption = "Group 3") +
+  coord_flip()
+
+common_types_plot
+```
+
+It is clear that common passenger vehicles such as station wagons and sedans are the most likely to be involved in crashes in NYC to an extreme degree. This does not indicate that those vehicle types are inherently more dangerous or more prone to crashes, but more likely that those are the most common vehicle types in NYC. Further exploration could involve analyzing the rate of collision with normalized data based on the total amounts of vehicle types within the city. 
