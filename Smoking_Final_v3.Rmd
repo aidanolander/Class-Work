@@ -1,0 +1,369 @@
+---
+title: "Smoking Final v2"
+author: "Aidan Olander"
+date: "2023-03-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+#==============================================================================
+#   This chunk will be used for every assignment, including the Final Project
+#==============================================================================
+
+# Clear the working space
+rm(list = ls())
+
+#Set working directory
+setwd("/Users/aidanolander/Documents/SCU/DataAnalytics/Winter2023/EconometricsR")
+getwd()
+
+### Load the packages (all must have been installed)
+   
+    library(doBy)
+    library(dplyr)
+    library(foreign)
+    library(ggplot2)
+    library(knitr)
+    library(lmtest)
+    library(readstata13)
+    library(sandwich)
+    library(stargazer)
+    library(AER)
+    library(gdata)
+#extras
+    library(reshape2)
+    library(psych)
+    library(erer)
+
+# CSE Function
+cse = function(reg){
+  rob = sqrt(diag(vcovHC(reg, type="HC1")))   # type = c("const", "HC", "HC0", "HC1", "HC2", "HC3", "HC4", "HC4m", "HC5")
+  return(rob)
+}
+
+# Load the data
+data <- read.csv('smoker.csv')
+
+# We want to create a BMI column, that way we can account for height and weight
+data$height.m <- data$height.cm./100
+
+data$bmi <- data$weight.kg./(data$height.m^2)
+
+# Variables we want:
+#   - hemoglobin
+#   - triglyceride
+#   - serum.creatinine
+#   - smoking
+#   - systolic
+#   - urine.protein
+#   - fasting.blood.sugar
+#   - HDL 
+#   - LDL
+#   - AST 
+#   - ALT
+#   - Gtp
+#   - BMI
+
+
+describe(data)
+```
+
+
+
+```{r outliers, echo=FALSE, warning=FALSE}
+
+
+### Clean up outliers from dataset using Capping
+### Create new df called clean_data
+
+
+col_names <- list("bmi","systolic",'fasting.blood.sugar', 'triglyceride',
+                  'HDL', "LDL", "hemoglobin", "Urine.protein", 'serum.creatinine',
+                  'AST', 'ALT', 'Gtp', "smoking")
+
+
+exp_data <- data
+
+clean_my_data <- function(data_set) {
+  listCol <- list(NULL)
+  listDF<- data.frame(matrix(NA, nrow = 38984, ncol = 0))
+  for (i in col_names) {
+    x <- data_set[[i]]
+    qnt <- quantile(x, probs=c(.25, .75), na.rm = T)
+    caps <- quantile(x, probs=c(.05, .95), na.rm = T)
+    H <- 1.5 * IQR(x, na.rm = T)
+    x[x < (qnt[1] - H)] <- caps[1]
+    x[x > (qnt[2] + H)] <- caps[2]
+    listDF[[i]] <- x
+  }
+  
+  return(listDF)
+}
+
+
+cleanData <- clean_my_data(exp_data)
+
+regAll1=lm(bmi~systolic, data=cleanData)
+regAll2=lm(bmi~fasting.blood.sugar, data=cleanData)
+regAll3=lm(bmi~triglyceride, data=cleanData)
+regAll4=lm(bmi~HDL, data=cleanData)
+regAll5=lm(bmi~LDL, data=cleanData)
+regAll6=lm(bmi~hemoglobin, data=cleanData)
+regAll7=lm(bmi~Urine.protein, data=cleanData)
+regAll8=lm(bmi~serum.creatinine, data=cleanData)
+regAll9=lm(bmi~AST, data=cleanData)
+regAll10=lm(bmi~ALT, data=cleanData)
+regAll11=lm(bmi~Gtp, data=cleanData)
+regAll12=lm(bmi~smoking, data=cleanData)
+
+
+
+
+stargazer(regAll1,regAll2,regAll3,regAll4,regAll5,regAll6, 
+          se=list(cse(regAll1), cse(regAll2), cse(regAll3),
+                  cse(regAll4), cse(regAll5),cse(regAll6)), 
+          title="BMI Single Regressions Part 1", type="text", df=FALSE, digits=2)
+```
+
+
+``` {r second Reg, echo=FALSE, warning=FALSE}
+
+
+
+
+stargazer(regAll7,regAll8,regAll9,regAll10,regAll11,
+          regAll12, se=list(cse(regAll7), cse(regAll8), cse(regAll9),
+                            cse(regAll10), cse(regAll11), cse(regAll12)), 
+          title="BMI Single Regressions Part 2", type="text", df=FALSE, digits=2)
+
+
+```
+
+
+
+```{r regressor plotting, echo=FALSE}
+
+# Exploratory Analysis with Single Regressor Plotting
+
+#Hemoglobin
+ggplot(cleanData, aes(x=hemoglobin, y=bmi)) + geom_point(col="blue")+
+labs(x = "Hemoglobin", y = "BMI") + stat_smooth(method = "lm", col = "red", se=FALSE)
+
+#Triglyceride
+ggplot(cleanData, aes(x=triglyceride, y=bmi)) + geom_point(col="blue")+
+labs(x = "Triglyceride", y = "BMI") + stat_smooth(method = "lm", col = "red", se=FALSE)
+
+#Creatinine
+ggplot(cleanData, aes(x=serum.creatinine, y=bmi)) + geom_point(col="blue")+
+labs(x = "Creatinine", y = "BMI") + stat_smooth(method = "lm", col = "red", se=FALSE)
+
+#Smoking
+ggplot(cleanData, aes(x=bmi, y=smoking)) + geom_point(col="blue")+
+labs(x = "BMI", y = "Smoking") + stat_smooth(method = "lm", col = "red", se=FALSE)
+
+#Systolic
+ggplot(cleanData, aes(x=systolic, y=bmi)) + geom_point(col="blue")+
+labs(x = "Systolic", y = "BMI") + stat_smooth(method = "lm", col = "red", se=FALSE)
+
+#Urine.protein
+ggplot(cleanData, aes(x=Urine.protein, y=bmi)) + geom_point(col="blue")+
+labs(x = "Urine Protein", y = "BMI") + stat_smooth(method = "lm", col = "red", se=FALSE)
+
+#Gtp
+ggplot(cleanData, aes(x=Gtp, y=bmi)) + geom_point(col="blue")+
+labs(x = "Gtp", y = "BMI") + stat_smooth(method = "lm", col = "red", se=FALSE)
+
+#AST
+ggplot(cleanData, aes(x=AST, y=bmi)) + geom_point(col="blue")+
+labs(x = "AST", y = "BMI") + stat_smooth(method = "lm", col = "red", se=FALSE)
+
+#ALT
+ggplot(cleanData, aes(x=ALT, y=bmi)) + geom_point(col="blue")+
+labs(x = "ALT", y = "BMI") + stat_smooth(method = "lm", col = "red", se=FALSE)
+
+#fasting.blood.sugar
+ggplot(cleanData, aes(x=fasting.blood.sugar, y=bmi)) + geom_point(col="blue")+
+labs(x = "Fasting Blood Sugar", y = "BMI") + stat_smooth(method = "lm", col = "red", se=FALSE)
+
+#HDL
+ggplot(cleanData, aes(x=HDL, y=bmi)) + geom_point(col="blue")+
+labs(x = "HDL", y = "BMI") + stat_smooth(method = "lm", col = "red", se=FALSE)
+
+#LDL
+ggplot(cleanData, aes(x=LDL, y=bmi)) + geom_point(col="blue")+
+labs(x = "LDL", y = "BMI") + stat_smooth(method = "lm", col = "red", se=FALSE)
+
+#Hemoglobin with Smoking
+ggplot(cleanData, aes(x=hemoglobin, y=bmi, colour=factor(smoking))) + geom_point(col="blue")+  geom_point(size=1) + labs(x = "Hemoglobin", y = "BMI")
+
+
+```
+``` {r corr and heatmap, echo=FALSE, warning=FALSE}
+
+#Start on correlation table, melt it for easier understanding
+corr <- round(cor(cleanData),2)
+
+
+melt_corr <- melt(corr)
+
+# Heatmap for correlation, quite a few are highly correlated (like weight/waist)
+heatMap <- ggplot(data = melt_corr, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile()
+heatMap + theme(axis.text.x = element_text(angle=90))
+
+#Which variables are correlated, cleaned further
+melt_corr[abs(melt_corr$value)>0.2 & melt_corr$value<1,]
+
+```
+
+
+
+``` {r Triglyceride Regressions, echo=FALSE, warning=FALSE}
+
+### It seems like we only need one of AST/ALT and HDL/LDL, so I'll keep ALT and HDL
+
+regT1=lm(bmi~triglyceride+serum.creatinine+smoking+hemoglobin, data=cleanData)
+regT2=lm(bmi~triglyceride+I(triglyceride^2)+smoking, data=cleanData)
+regT3=lm(bmi~log(triglyceride)+log(systolic)+factor(smoking)+hemoglobin+
+           hemoglobin:factor(smoking), data=cleanData)
+regT4=lm(bmi~log(triglyceride)+factor(smoking)+HDL+Gtp, data=cleanData)
+regT5=lm(bmi~log(triglyceride)+HDL+ALT+log(hemoglobin)+Gtp, data=cleanData)
+regT6=lm(bmi~log(triglyceride)+factor(smoking)+log(systolic)+Gtp+
+           hemoglobin:factor(smoking)+HDL, data=cleanData)
+
+stargazer(regT1,regT2,regT3,regT4,regT5,regT6, se=list(cse(regT1),cse(regT2),cse(regT3),cse(regT4), cse(regT5),cse(regT6)), 
+        title="Triglyceride Regressions", type="text", df=FALSE, digits=2)
+
+```
+
+``` {r Hemoglobin Regressions, echo=FALSE, warning=FALSE}
+
+regH1=lm(bmi~hemoglobin+factor(smoking), data=cleanData)
+regH2=lm(bmi~hemoglobin+factor(smoking)+hemoglobin:factor(smoking), data=cleanData)
+regH3=lm(bmi~hemoglobin+systolic+triglyceride+HDL, data=cleanData)
+regH4=lm(bmi~log(hemoglobin)+factor(smoking)+
+           triglyceride:factor(smoking), data=cleanData)
+regH5=lm(bmi~log(hemoglobin)+log(systolic)+log(triglyceride)+
+           log(systolic):Gtp, data=cleanData)
+regH6=lm(bmi~log(hemoglobin)+I(log(hemoglobin)^2)+HDL+Gtp+ALT, data=cleanData)
+
+stargazer(regH1,regH2,regH3,regH4,regH5,regH6, se=list(cse(regH1), cse(regH2),
+          cse(regH3),cse(regH4),cse(regH5),cse(regH6)), 
+        title="Hemoglobin Regressions", type="text", df=FALSE, digits=2)
+```
+
+``` {r Creatinine, echo=FALSE, warning=FALSE}
+
+regC1=lm(bmi~serum.creatinine+triglyceride, data=cleanData)
+regC2=lm(bmi~serum.creatinine+I(serum.creatinine^2)+triglyceride, data=cleanData)
+regC3=lm(bmi~serum.creatinine+factor(smoking)+Urine.protein, data=cleanData)
+regC4=lm(bmi~log(serum.creatinine)+factor(smoking)+ALT+Gtp, data=cleanData)
+regC5=lm(bmi~log(serum.creatinine)+hemoglobin:factor(smoking)+HDL, data=cleanData)
+regC6=lm(bmi~log(serum.creatinine)+triglyceride+HDL+Gtp+ALT, data=cleanData)
+
+stargazer(regC1,regC2,regC3,regC4,regC5,regC6, se=list(cse(regC1), cse(regC2),
+          cse(regC3),cse(regC4),cse(regC5),cse(regC6)), 
+        title="Hemoglobin Regressions", type="text", df=FALSE, digits=2)
+```
+``` {r Systolic Regressions, echo=FALSE, warning=FALSE}
+
+regS1=lm(bmi~systolic+Urine.protein, data=cleanData)
+regS2=lm(bmi~log(systolic)+Urine.protein, data=cleanData)
+regS3=lm(bmi~systolic+triglyceride, data=cleanData)
+regS4=lm(bmi~log(systolic)+triglyceride, data=cleanData)
+regS5=lm(bmi~log(systolic)+log(triglyceride), data=cleanData)
+regS6=lm(bmi~systolic+I(systolic^3)+systolic:triglyceride, data=cleanData)
+
+stargazer(regS1,regS2,regS3,regS4,regS5,regS6, se=list(cse(regS1), cse(regS2),
+cse(regS3),cse(regS4),cse(regS5),cse(regS6)), 
+        title="Systolic Regressions", type="text", df=FALSE, digits=2)
+
+```
+``` {r Log Regressions, echo=FALSE, warning=FALSE}
+
+regL1=lm(log(bmi)~triglyceride+hemoglobin+systolic, data=cleanData)
+regL2=lm(log(bmi)~log(triglyceride)+log(hemoglobin)+log(systolic), data=cleanData)
+regL3=lm(log(bmi)~log(triglyceride)+factor(smoking)+log(systolic),
+         hemoglobin:factor(smoking),data=cleanData)
+regL4=lm(log(bmi)~log(systolic)+ALT+HDL+Gtp, data=cleanData)
+regL5=lm(log(bmi)~triglyceride+I(triglyceride^2)+systolic
+         +ALT+HDL, data=cleanData)
+regL6=lm(log(bmi)~log(hemoglobin)+fasting.blood.sugar+Gtp, data=cleanData)
+
+stargazer(regL1,regL2,regL3,regL4,regL5,regL6, se=list(cse(regL1), cse(regL2),
+cse(regL3),cse(regL4),cse(regL5),cse(regL6)), 
+        title="Log of BMI Regressions", type="text", df=FALSE, digits=2)
+```
+
+``` {r Probit Regression, echo=FALSE, warning=FALSE}
+
+cleanData$Obese <- ifelse(cleanData$bmi > 30.0, 1, 0)
+p1 = glm(Obese~smoking + serum.creatinine, family=binomial(link="probit"), x=TRUE, data=cleanData)
+p2 = glm(Obese~hemoglobin + systolic, family=binomial(link="probit"), x=TRUE, data=cleanData)
+
+
+ggplot(cleanData, aes(x=hemoglobin, y=Obese)) + geom_point(col="blue") + 
+labs(title = "Obesity vs Hemoglobin", x = "Hemoglobin", y = "Obesity") + stat_smooth(method="glm", method.args=list(family=binomial(link="probit")), se=FALSE, col = "green" )
+
+
+library(erer)
+fm3a = maBina(p1, x.mean=TRUE, rev.dum=TRUE, digits=4)
+fm4a = maBina(p2, x.mean=TRUE, rev.dum=FALSE, digits=4)
+
+stargazer(fm3a,fm4a, se=list(NULL, NULL), 
+        title="Probit - Average Marginal Effects", type="text", 
+        star.cutoffs=NA, df=FALSE, digits=4, keep.stat = c("n","ll"))
+
+```
+
+``` {r Logit Models, echo=FALSE, warning=FALSE}
+
+l1 = glm(Obese~smoking + serum.creatinine, family = binomial, x = TRUE, data = cleanData)
+l2 = glm(Obese~hemoglobin + systolic, family = binomial, x = TRUE, data = cleanData)
+
+fm5a = maBina(l1, x.mean=TRUE, rev.dum=TRUE, digits=4)
+fm6a = maBina(l2, x.mean=TRUE, rev.dum=FALSE, digits=4)
+
+stargazer(fm5a, fm6a, se=list(NULL, NULL), 
+        title="Logit- Marginal Effects", type="text", 
+        star.cutoffs=NA, df=FALSE, digits=4, keep.stat = c("n","ll"))
+
+preplot1=maTrend(fm6a, n=300, nam.c="hemoglobin", simu.c=FALSE)
+plot(preplot1)
+
+preplot2=maTrend(fm5a, n=300, nam.c="serum.creatinine", simu.c=FALSE)
+plot(preplot2)
+
+
+
+```
+
+``` {r Pseudo R2s, echo=FALSE}
+
+
+pseudoR2_1=(p1$null.deviance-p1$deviance)/p1$null.deviance
+pseudoR2_2=(p2$null.deviance-p2$deviance)/p2$null.deviance
+
+print(pseudoR2_1)
+print(pseudoR2_2)
+
+```
+
+
+``` {r Best Regressions, echo=FALSE, warning=FALSE}
+
+regB1=lm(log(bmi)~log(triglyceride)+log(systolic),
+         hemoglobin:factor(smoking),data=cleanData)
+regB2=lm(bmi~log(serum.creatinine)+triglyceride+HDL+Gtp+ALT, data=cleanData)
+regB3=lm(bmi~log(hemoglobin)+I(log(hemoglobin)^2)+HDL+Gtp+ALT, data=cleanData)
+regB4=lm(bmi~log(triglyceride)+factor(smoking)+log(systolic)+Gtp+
+           hemoglobin:factor(smoking)+HDL, data=cleanData)
+regB5=lm(bmi~log(triglyceride)+log(systolic)+hemoglobin+factor(smoking)+
+           hemoglobin:factor(smoking)+ALT+HDL+Gtp+fasting.blood.sugar+
+           serum.creatinine, data=cleanData)
+
+stargazer(regB1,regB2,regB3,regB4,regB5, se=list(cse(regB1), cse(regB2),
+cse(regB3),cse(regB4),cse(regB5)), 
+        title="Best Regressions", type="text", df=FALSE, digits=4)
+
+```
