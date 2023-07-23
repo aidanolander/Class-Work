@@ -1,5 +1,5 @@
 ---
-title: "Smoking Final v2"
+title: "Smoking Final"
 author: "Aidan Olander"
 date: "2023-03-01"
 output: html_document
